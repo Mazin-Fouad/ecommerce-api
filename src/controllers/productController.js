@@ -1,8 +1,10 @@
-const mockProducts = [
-  { id: 1, name: "Laptop Pro", price: 1200 },
-  { id: 2, name: "Wireless Maus", price: 50 },
-  { id: 3, name: "Mechanische Tastatur", price: 150 },
-];
+// const mockProducts = [
+//   { id: 1, name: "Laptop Pro", price: 1200 },
+//   { id: 2, name: "Wireless Maus", price: 50 },
+//   { id: 3, name: "Mechanische Tastatur", price: 150 },
+// ];
+
+const mockProducts = require("../products.json");
 
 const getAllProducts = (req, res) => {
   try {
