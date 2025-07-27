@@ -1,0 +1,54 @@
+const { DataTypes, Model } = require("sequelize");
+const sequelize = require("../config/database");
+const bcrypt = require("bcrypt");
+
+class User extends Model {}
+
+User.init(
+  {
+    // Model attributes are defined here
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+      allowNull: false,
+    },
+    firstName: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    lastName: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true, // Jede E-Mail darf nur einmal vorkommen
+      validate: {
+        isEmail: true, // Eingebaute Validierung von Sequelize
+      },
+    },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+  },
+  {
+    // Other model options go here
+    sequelize, // Wir übergeben die Verbindungsinstanz
+    modelName: "User", // Wir benennen das Modell
+    tableName: "users", // Wir legen den Tabellennamen explizit fest
+    hooks: {
+      // Dieser Hook wird automatisch VOR dem Erstellen eines neuen Benutzers ausgeführt
+      beforeCreate: async (user) => {
+        if (user.password) {
+          const salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(user.password, salt);
+        }
+      },
+    },
+  }
+);
+
+module.exports = User;

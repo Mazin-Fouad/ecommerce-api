@@ -1,6 +1,7 @@
 const express = require("express");
 const app = express();
 const productRoutes = require("./routes/productRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 // Ein einfacher "Hallo Welt"-Endpunkt für den Anfang
 app.get("/", (req, res) => {
@@ -8,5 +9,6 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api", productRoutes);
+app.use("/api/users", userRoutes);
 
 module.exports = app;
