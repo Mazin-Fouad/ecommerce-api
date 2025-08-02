@@ -2,7 +2,16 @@ const { DataTypes, Model } = require("sequelize");
 const sequelize = require("../config/database");
 const bcrypt = require("bcrypt");
 
-class User extends Model {}
+class User extends Model {
+  // NEU: Eine Instanzmethode, um das Passwort sicher zu vergleichen.
+  // "this" bezieht sich auf die spezifische User-Instanz (z.B. den User "Mazin").
+  async comparePassword(enteredPassword) {
+    // bcrypt.compare ist die einzige sichere Methode dafür.
+    // Sie nimmt das Klartext-Passwort, hasht es intern erneut mit dem gespeicherten "Salz"
+    // und vergleicht das Ergebnis mit dem Hash in der Datenbank.
+    return await bcrypt.compare(enteredPassword, this.password);
+  }
+}
 
 User.init(
   {
@@ -35,7 +44,6 @@ User.init(
     },
   },
   {
-    // Other model options go here
     sequelize, // Wir übergeben die Verbindungsinstanz
     modelName: "User", // Wir benennen das Modell
     tableName: "users", // Wir legen den Tabellennamen explizit fest
