@@ -42,6 +42,10 @@ User.init(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    phoneNumber: {
+      type: DataTypes.STRING,
+      allowNull: true, // Muss mit der Migration übereinstimmen
+    },
   },
   {
     sequelize, // Wir übergeben die Verbindungsinstanz
