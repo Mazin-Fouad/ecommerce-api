@@ -59,6 +59,14 @@ User.init(
           user.password = await bcrypt.hash(user.password, salt);
         }
       },
+      // Dieser Hook wird VOR dem Aktualisieren eines Benutzers ausgeführt
+      beforeUpdate: async (user) => {
+        // Prüft, ob das Passwort-Feld geändert wurde
+        if (user.changed("password")) {
+          const salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(user.password, salt);
+        }
+      },
     },
   }
 );

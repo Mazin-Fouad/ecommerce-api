@@ -92,7 +92,64 @@ const login = async (req, res) => {
   }
 };
 
+const updateUser = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Benutzer nicht gefunden." });
+    }
+
+    const { firstName, lastName, email, password } = req.body;
+
+    // Validierung für PUT: Alle Felder außer Passwort werden erwartet.
+    if (!firstName || !lastName || !email) {
+      return res
+        .status(400)
+        .json({ message: "Bitte Vornamen, Nachnamen und E-Mail angeben." });
+    }
+
+    // Prüfen, ob die neue E-Mail bereits von einem anderen Benutzer verwendet wird.
+    if (email !== user.email) {
+      const existingUser = await User.findOne({ where: { email } });
+      if (existingUser) {
+        return res.status(409).json({
+          message: "Ein anderer Benutzer mit dieser E-Mail existiert bereits.",
+        });
+      }
+    }
+
+    // Benutzerdaten aktualisieren
+    user.firstName = firstName;
+    user.lastName = lastName;
+    user.email = email;
+
+    // Passwort nur aktualisieren, wenn ein neues angegeben wurde.
+    if (password) {
+      user.password = password;
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      message: "Benutzer erfolgreich aktualisiert.",
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Fehler beim Aktualisieren des Benutzers.",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
+  updateUser,
 };
