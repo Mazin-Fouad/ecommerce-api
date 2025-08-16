@@ -1,21 +1,56 @@
 const User = require("../models/userModel");
 const jwt = require("jsonwebtoken");
 
+/**
+ * @module UserController
+ * @description Controller für alle benutzerbezogenen Operationen.
+ * Verwaltet Registrierung, Authentifizierung und Benutzerdatenverwaltung.
+ */
+
+/**
+ * Registriert einen neuen Benutzer im System.
+ *
+ * @async
+ * @function register
+ * @description Erstellt ein neues Benutzerkonto mit verschlüsseltem Passwort.
+ * Validiert alle erforderlichen Felder und prüft auf doppelte E-Mail-Adressen.
+ *
+ * @requires Request.body.firstName - Vorname des Benutzers
+ * @requires Request.body.lastName - Nachname des Benutzers
+ * @requires Request.body.email - Eindeutige E-Mail-Adresse
+ * @requires Request.body.password - Passwort (wird automatisch gehasht)
+ *
+ * @returns {Object} 201 - Erfolgreich registrierter Benutzer ohne sensible Daten
+ * @returns {Object} 400 - Fehlende Pflichtfelder
+ * @returns {Object} 409 - E-Mail-Adresse bereits registriert
+ * @returns {Object} 500 - Interner Serverfehler
+ */
 const register = async (req, res) => {
   try {
     const { firstName, lastName, email, password } = req.body;
 
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ message: "Bitte alle Felder ausfüllen." });
+    // Eingabevalidierung
+    const missingFields = [];
+    if (!firstName) missingFields.push("Vorname");
+    if (!lastName) missingFields.push("Nachname");
+    if (!email) missingFields.push("E-Mail");
+    if (!password) missingFields.push("Passwort");
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Folgende Pflichtfelder fehlen: ${missingFields.join(", ")}.`,
+      });
     }
 
-    const existingUser = await User.findOne({ where: { email: email } });
-    if (existingUser) {
-      return res
-        .status(409)
-        .json({ message: "Ein Benutzer mit dieser E-Mail existiert bereits." });
+    // Duplikatsprüfung
+    const emailAlreadyExists = await User.findOne({ where: { email } });
+    if (emailAlreadyExists) {
+      return res.status(409).json({
+        message: "Diese E-Mail-Adresse ist bereits registriert.",
+      });
     }
 
+    // Benutzererstellung
     const newUser = await User.create({
       firstName,
       lastName,
@@ -23,127 +58,175 @@ const register = async (req, res) => {
       password,
     });
 
+    // Sichere Antwort ohne sensible Daten
+    const safeUserData = {
+      id: newUser.id,
+      firstName: newUser.firstName,
+      lastName: newUser.lastName,
+      email: newUser.email,
+    };
+
     res.status(201).json({
-      message: "Benutzer erfolgreich registriert.",
-      user: {
-        id: newUser.id,
-        firstName: newUser.firstName,
-        lastName: newUser.lastName,
-        email: newUser.email,
-      },
+      message: "Registrierung erfolgreich abgeschlossen.",
+      user: safeUserData,
     });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Fehler bei der Registrierung.", error: error.message });
+    console.error("Registrierungsfehler:", error);
+    res.status(500).json({
+      message: "Bei der Registrierung ist ein Fehler aufgetreten.",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 };
 
-// NEU: Die Funktion für den Login-Prozess
+/**
+ * Authentifiziert einen Benutzer und stellt JWT-Token aus.
+ *
+ * @async
+ * @function login
+ * @description Verifiziert Benutzeranmeldedaten und generiert einen zeitlich
+ * begrenzten JWT-Token für authentifizierte API-Zugriffe.
+ *
+ * @requires Request.body.email - Registrierte E-Mail-Adresse
+ * @requires Request.body.password - Benutzerpasswort im Klartext
+ *
+ * @returns {Object} 200 - JWT-Token für authentifizierte Anfragen
+ * @returns {Object} 400 - Fehlende Anmeldedaten
+ * @returns {Object} 401 - Ungültige Anmeldedaten
+ * @returns {Object} 500 - Interner Serverfehler
+ *
+ * @security Verwendet bcrypt für Passwort-Vergleich
+ * @security Generische Fehlermeldung verhindert E-Mail-Enumeration
+ */
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Validierung: Sind die Anmeldedaten überhaupt vorhanden?
+    // Eingabevalidierung
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Bitte E-Mail und Passwort angeben." });
-    }
-
-    // 2. Benutzersuche: Finde den Benutzer anhand seiner einzigartigen E-Mail.
-    const user = await User.findOne({ where: { email } });
-
-    // 3. Authentifizierung: Prüfe, ob der Benutzer existiert UND ob das Passwort korrekt ist.
-    // Wir nutzen unsere neue `comparePassword`-Methode aus dem Modell.
-    // SICHERHEITS-TIPP: Gib IMMER die gleiche Fehlermeldung zurück, egal ob die E-Mail falsch
-    // war oder das Passwort. So kann ein Angreifer nicht erraten, welche E-Mails in deinem System registriert sind.
-    if (!user || !(await user.comparePassword(password))) {
-      // 401 Unauthorized ist der korrekte HTTP-Statuscode für fehlgeschlagene Logins.
-      return res.status(401).json({
-        message:
-          "Authentifizierung fehlgeschlagen. E-Mail oder Passwort ungültig.",
+      return res.status(400).json({
+        message: "E-Mail und Passwort sind erforderlich.",
       });
     }
 
-    // 4. Autorisierung: Der Benutzer ist authentifiziert! Jetzt stellen wir den JWT aus.
-    const payload = {
+    // Benutzerauthentifizierung
+    const user = await User.findOne({ where: { email } });
+
+    // Sicherheitshinweis: Identische Fehlermeldung für beide Fälle
+    const isValidCredentials = user && (await user.comparePassword(password));
+    if (!isValidCredentials) {
+      return res.status(401).json({
+        message: "Anmeldedaten sind ungültig.",
+      });
+    }
+
+    // JWT-Token generierung
+    const tokenPayload = {
       id: user.id,
       email: user.email,
     };
 
-    const token = jwt.sign(
-      payload, // Die Daten, die im Token gespeichert werden
-      process.env.JWT_SECRET, // Unser geheimer Schlüssel zum Versiegeln
-      { expiresIn: process.env.JWT_EXPIRES_IN } // Die Option für die Gültigkeitsdauer
-    );
+    const accessToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || "24h",
+    });
 
-    // 5. Erfolg: Sende den Token an den Client. Der Client muss ihn nun für zukünftige Anfragen speichern.
     res.status(200).json({
-      message: "Login erfolgreich.",
-      token: token,
+      message: "Anmeldung erfolgreich.",
+      token: accessToken,
+      expiresIn: process.env.JWT_EXPIRES_IN || "24h",
     });
   } catch (error) {
-    console.error("Login-Fehler:", error);
+    console.error("Anmeldefehler:", error);
     res.status(500).json({
-      message: "Ein interner Fehler ist aufgetreten.",
-      error: error.message,
+      message: "Bei der Anmeldung ist ein Fehler aufgetreten.",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
 
+/**
+ * Aktualisiert Benutzerdaten des authentifizierten Benutzers.
+ *
+ * @async
+ * @function updateUser
+ * @description Ermöglicht einem authentifizierten Benutzer die Änderung seiner
+ * persönlichen Daten. E-Mail-Änderungen werden auf Duplikate geprüft.
+ *
+ * @requires Authentication - JWT-Token im Authorization-Header
+ * @requires Request.body.firstName - Neuer Vorname
+ * @requires Request.body.lastName - Neuer Nachname
+ * @requires Request.body.email - Neue E-Mail-Adresse
+ * @optional Request.body.password - Neues Passwort (optional)
+ *
+ * @returns {Object} 200 - Aktualisierte Benutzerdaten ohne Passwort
+ * @returns {Object} 400 - Fehlende Pflichtfelder
+ * @returns {Object} 404 - Benutzer nicht gefunden
+ * @returns {Object} 409 - Neue E-Mail bereits vergeben
+ * @returns {Object} 500 - Interner Serverfehler
+ */
 const updateUser = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
+    // Benutzer aus JWT-Token laden
+    const currentUser = await User.findByPk(req.user.id);
 
-    if (!user) {
-      return res.status(404).json({ message: "Benutzer nicht gefunden." });
+    if (!currentUser) {
+      return res.status(404).json({
+        message: "Benutzerkonto nicht gefunden.",
+      });
     }
 
     const { firstName, lastName, email, password } = req.body;
 
-    // Validierung für PUT: Alle Felder außer Passwort werden erwartet.
-    if (!firstName || !lastName || !email) {
-      return res
-        .status(400)
-        .json({ message: "Bitte Vornamen, Nachnamen und E-Mail angeben." });
+    // Pflichtfelder validieren
+    const requiredFields = { firstName, lastName, email };
+    const missingFields = Object.entries(requiredFields)
+      .filter(([_, value]) => !value)
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Folgende Pflichtfelder fehlen: ${missingFields.join(", ")}.`,
+      });
     }
 
-    // Prüfen, ob die neue E-Mail bereits von einem anderen Benutzer verwendet wird.
-    if (email !== user.email) {
-      const existingUser = await User.findOne({ where: { email } });
-      if (existingUser) {
+    // E-Mail-Duplikatsprüfung bei Änderung
+    const isEmailChanged = email !== currentUser.email;
+    if (isEmailChanged) {
+      const emailTaken = await User.findOne({ where: { email } });
+      if (emailTaken) {
         return res.status(409).json({
-          message: "Ein anderer Benutzer mit dieser E-Mail existiert bereits.",
+          message: "Diese E-Mail-Adresse wird bereits verwendet.",
         });
       }
     }
 
     // Benutzerdaten aktualisieren
-    user.firstName = firstName;
-    user.lastName = lastName;
-    user.email = email;
+    Object.assign(currentUser, {
+      firstName,
+      lastName,
+      email,
+      ...(password && { password }), // Passwort nur wenn vorhanden
+    });
 
-    // Passwort nur aktualisieren, wenn ein neues angegeben wurde.
-    if (password) {
-      user.password = password;
-    }
+    await currentUser.save();
 
-    await user.save();
+    // Sichere Antwort ohne Passwort
+    const updatedUserData = {
+      id: currentUser.id,
+      firstName: currentUser.firstName,
+      lastName: currentUser.lastName,
+      email: currentUser.email,
+    };
 
     res.status(200).json({
-      message: "Benutzer erfolgreich aktualisiert.",
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-      },
+      message: "Benutzerdaten erfolgreich aktualisiert.",
+      user: updatedUserData,
     });
   } catch (error) {
+    console.error("Aktualisierungsfehler:", error);
     res.status(500).json({
-      message: "Fehler beim Aktualisieren des Benutzers.",
-      error: error.message,
+      message: "Bei der Aktualisierung ist ein Fehler aufgetreten.",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
