@@ -7,6 +7,7 @@ const rateLimit = require("express-rate-limit");
 // Route Imports
 const productRoutes = require("./routes/productRoutes");
 const userRoutes = require("./routes/userRoutes");
+const cartRoutes = require("./routes/cartRoutes");
 
 // Error Handlers
 const errorHandler = require("./middleware/errorHandler");
@@ -96,9 +97,11 @@ app.get("/health", (req, res) => {
 // Benutzer-Management Routen
 app.use("/api/users", userRoutes);
 
-// Produkt-Management Routen (derzeit deaktiviert)
-// TODO: Aktivieren wenn Produkt-Controller implementiert ist
-// app.use("/api/products", productRoutes);
+// Produkt-Management Routen
+app.use("/api/products", productRoutes);
+
+// Warenkorb-Management Routen
+app.use("/api/cart", cartRoutes);
 
 /**
  * Fehlerbehandlung

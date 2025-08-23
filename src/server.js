@@ -1,6 +1,8 @@
 const app = require("./app");
 const sequelize = require("./config/database");
 require("./models/userModel");
+require("./models/productModel");
+require("./models/cartModel");
 
 require("dotenv").config();
 
